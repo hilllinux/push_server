@@ -5,3 +5,6 @@ var
 ioClient.on('foo', function(msg) {
     console.info(msg);
 });
+
+ioClient.emit('reg',"12")
+ioClient.emit('mailto',"13","hello")
