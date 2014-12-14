@@ -7,4 +7,4 @@ ioClient.on('foo', function(msg) {
 });
 
 ioClient.emit('reg',"12")
-ioClient.emit('mailto',"13","hello")
+//ioClient.emit('mailto',"12","hello")
