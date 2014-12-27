@@ -2,7 +2,7 @@ var
     io = require('socket.io-client'),
     ioClient = io.connect('http://localhost:3000');
 
-ioClient.on('foo', function(msg) {
+ioClient.on('info', function(msg) {
     console.info(msg);
 });
 
