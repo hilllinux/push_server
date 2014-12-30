@@ -9,41 +9,56 @@ var redis_client = redis.createClient('6379', '127.0.0.1');
 // code for log info
 var debug = 1;
 function log(msg){
-    if (1 == debug) console.info(msg);
+    var date = new Date(); 
+    if (1 == debug) console.info(date+" --> "+msg);
 }
 
 log('SocketIO > listening on port :3000');
 
+// redis binding sub channel
 redis_client.on("ready", function() {
     log("redis is ready");
     redis_client.subscribe("msg");
 })
 
-
+//handle the published message from the PHP server
 redis_client.on("message", function(channel, msg){
     log(channel+":"+msg);
 
-    var obj    = JSON.parse(msg);
+    // decode json to obj
+    try {
+        var obj = eval("(" + msg + ")");
+    } catch (error) {
+        log("invaild json fromat");
+        return;
+    }
+
+    //get info from obj 
     var id     = obj.userID,
         info   = obj.msg,
-        app    = obj.app;
+        app    = obj.app,
         type   = obj.type;
 
+    
+    if (!id || !info || !app || !type) {
+        log("paramter is not complete!")
+        return ;
+    }
+    
+    //send message
     if ('broadcast' == type) {
         //some code here for broadcast
         for (x in clients ) {
             clients[x].emit('info',info);
         }
     } else {
-        clients[id].emit('info',info);
+        if (clients[id]) clients[id].emit('info',info);
+        else log("user: " + id+" is not online!");
     }
+    
 });
 
-//redis test
-//redis_client.set("client_123", "test", redis.print);
-//redis_client.get("client_123", redis.print);
 
-// Event fired every time a new client connects:
 ioServer.sockets.on('connection', function(socket) {
     log('New client connected (id=' + socket.id + ').');
 
@@ -55,6 +70,7 @@ ioServer.sockets.on('connection', function(socket) {
     }
 
 
+    // handle bind socket to client ID flow;
     socket.on('reg', function(message){
         log(message+":"+socket.id);
 
@@ -78,6 +94,7 @@ ioServer.sockets.on('connection', function(socket) {
     //    socket.broadcast.emit('info', JSON.stringify(message));
     //});
 
+    // mailto method. not use now
     socket.on('mailto', function(message){
         log(message[0]+":"+ message[1]);
 
@@ -99,10 +116,11 @@ ioServer.sockets.on('connection', function(socket) {
 });
 
 
-// notice to reg in
+// notice user to reg in
 setInterval(function() { for(x in unreg_clients) unreg_clients[x].emit("info","unreg");
 }, 1000);
 
+// timer set for push info to clients
 setInterval(function() {
     for (x in clients) clients[x].emit("info","this is message from server");
 }, 2000);

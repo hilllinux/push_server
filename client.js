@@ -1,6 +1,6 @@
 var
     io = require('socket.io-client'),
-    ioClient = io.connect('http://106.187.51.112:3000');
+    ioClient = io.connect('http://localhost:3000');
 
 ioClient.on('info', function(msg) {
     console.info(msg);
