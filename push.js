@@ -7,11 +7,13 @@ var redis = require("redis");
 var redis_client = redis.createClient('6379', '127.0.0.1');
 
 // code for log info
+// debug function
 var debug = 1;
 function log(msg){
     var date = new Date(); 
     if (1 == debug) console.info(date+" --> "+msg);
 }
+
 
 log('SocketIO > listening on port :3000');
 
@@ -27,33 +29,25 @@ redis_client.on("message", function(channel, msg){
 
     // decode json to obj
     try {
-        var obj = eval("(" + msg + ")");
-    } catch (error) {
-        log("invaild json fromat");
-        return;
-    }
+        var obj = JSON.parse(msg);
+        var id     = obj.id,
+            info   = obj.msg,
+            app    = obj.app,
+            type   = obj.type;
 
-    //get info from obj 
-    var id     = obj.userID,
-        info   = obj.msg,
-        app    = obj.app,
-        type   = obj.type;
-
-    
-    if (!id || !info || !app || !type) {
-        log("paramter is not complete!")
-        return ;
-    }
-    
-    //send message
-    if ('broadcast' == type) {
-        //some code here for broadcast
-        for (x in clients ) {
-            clients[x].emit('info',info);
+        if (!id || !info || !app || !type) {
+            log(error);
+            log("paramter is not complete!")
+            return ;
         }
-    } else {
-        if (clients[id]) clients[id].emit('info',info);
+        //send message
+        if (clients[app][id]) clients[app][id].emit('info',info);
         else log("user: " + id+" is not online!");
+
+    } catch (error) {
+        log(error);
+        log("PHP send invaild json fromat");
+        return;
     }
     
 });
@@ -69,50 +63,45 @@ ioServer.sockets.on('connection', function(socket) {
         socket.emit('info','unreg');
     }
 
-
     // handle bind socket to client ID flow;
+    // {"app":"msd","id":"123"}
     socket.on('reg', function(message){
-        log(message+":"+socket.id);
+        log(socket.id+":"+message);
 
-        socket.uid = message;
-        clients[message] = socket;
+        try{
+            var client_message = JSON.parse(message);
 
-        //remove from the unreg list
-        var index = unreg_clients.indexOf(socket);
-        if (index != -1) {
-            unreg_clients.splice(index, 1);
-            log('Client (id=' + socket.id + ') is vaild user now.');
+            var app      = client_message.app,
+                user_id  = client_message.id;
+
+            if (!clients[app]) clients[app]={};
+
+            socket.uid = user_id;
+            clients[app][user_id]=socket;
+
+            //remove from the unreg list
+            var index = unreg_clients.indexOf(socket);
+            if (index != -1) {
+                unreg_clients.splice(index, 1);
+                log('Client (id=' + socket.id + ') is vaild user now.');
+            }
+
+            socket.emit('info', '{"'+app+'":"connected"}');
+
+        } catch (error) {
+            log(error);
+            log('client send invaild json format');
+            return
         }
 
-        socket.emit('info', message+":connected");
     })
-
-    // method for broadcast to others, depreased;
-    //socket.on('broadcast', function (message) {
-    //    log('ElephantIO broadcast > ' + JSON.stringify(message));
-
-    //    socket.broadcast.emit('info', JSON.stringify(message));
-    //});
-
-    // mailto method. not use now
-    socket.on('mailto', function(message){
-        log(message[0]+":"+ message[1]);
-
-        var userid = message[0],
-            msg = message[1];
-
-        if (clients[userid]) {
-            clients[userid].emit('info',msg);
-        } else {
-            log(message+" --> not send!");
-        }
-    });
 
     // When socket disconnects, remove it from the list:
     socket.on('disconnect', function() {
         delete clients[socket.uid];
         log('Client gone (id=' + socket.uid + ').');
     });
+
 });
 
 
@@ -122,5 +111,6 @@ setInterval(function() { for(x in unreg_clients) unreg_clients[x].emit("info","u
 
 // timer set for push info to clients
 setInterval(function() {
-    for (x in clients) clients[x].emit("info","this is message from server");
+    var push_list = clients['msd'];
+    for (x in push_list) push_list[x].emit("info","this is message from server");
 }, 2000);

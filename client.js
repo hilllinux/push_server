@@ -6,5 +6,5 @@ ioClient.on('info', function(msg) {
     console.info(msg);
 });
 
-ioClient.emit('reg',"12")
+ioClient.emit('reg','{"app":"msd","id":"12345"}')
 //ioClient.emit('mailto',"12","hello")
