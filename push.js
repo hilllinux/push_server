@@ -40,16 +40,23 @@ redis_client.on("message", function(channel, msg){
             log("paramter is not complete!")
             return ;
         }
+
         //send message
-        if (clients[app][id]) clients[app][id].emit('info',info);
-        else log("user: " + id+" is not online!");
+        if (app && type == 'broadcast') {
+            var push_list = clients[app];
+            for (x in push_list) push_list[x].emit("info",info);
+
+        } else if (clients[app][id]) {
+            clients[app][id].emit('info',info);
+        } else {
+            log("user: " + id+" is not online!");
+        }
 
     } catch (error) {
         log(error);
         log("PHP send invaild json fromat");
         return;
     }
-    
 });
 
 
@@ -60,7 +67,7 @@ ioServer.sockets.on('connection', function(socket) {
     if (!socket.uid) {
         log("unreg ueser login!");
         unreg_clients.push(socket);
-        socket.emit('info','unreg');
+        socket.emit('info','{"msg":"unreg"}');
     }
 
     // handle bind socket to client ID flow;
@@ -86,7 +93,7 @@ ioServer.sockets.on('connection', function(socket) {
                 log('Client (id=' + socket.id + ') is vaild user now.');
             }
 
-            socket.emit('info', '{"'+app+'":"connected"}');
+            socket.emit('info', '{"msg":"connected"}');
 
         } catch (error) {
             log(error);
@@ -106,11 +113,11 @@ ioServer.sockets.on('connection', function(socket) {
 
 
 // notice user to reg in
-setInterval(function() { for(x in unreg_clients) unreg_clients[x].emit("info","unreg");
+setInterval(function() { for(x in unreg_clients) unreg_clients[x].emit("info",'{"msg":"unreg"}');
 }, 1000);
 
 // timer set for push info to clients
 setInterval(function() {
     var push_list = clients['msd'];
-    for (x in push_list) push_list[x].emit("info","this is message from server");
+    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
 }, 2000);
