@@ -5,15 +5,17 @@ var io = require('socket.io'),
 
 var redis = require("redis");
 var redis_client = redis.createClient('6379', '127.0.0.1');
+var redis_io     = redis.createClient('6379', '127.0.0.1');
 
 // code for log info
 // debug function
 var debug = 1;
 function log(msg){
-    var date = new Date(); 
-    if (1 == debug) console.info(date+" --> "+msg);
-}
+    if (!debug) return;
 
+    var date = new Date(); 
+    console.info(date+" --> "+msg);
+}
 
 log('SocketIO > listening on port :3000');
 
@@ -26,6 +28,7 @@ log('SocketIO > listening on port :3000');
  * id   : user_id.
  * app  : the app that the message will be forward.
  * type : p2p or broadcast to clients
+ * mid  : message id
  * msg  : mssage will be send to client.
  *
  * e.g. : {"id":"123","app":"msd","type":"single","msg":"hello world"}
@@ -44,26 +47,32 @@ redis_client.on("message", function(channel, msg){
     try {
         var obj = JSON.parse(msg);
         var id     = obj.id,
-            info   = obj.msg,
             app    = obj.app,
+            mid    = obj.mid,
             type   = obj.type;
 
-        if (!id || !info || !app || !type) {
-            log(error);
+
+        if (!id || !app || !type || !mid || !(obj.msg)) {
             log("paramter is not complete!")
             return ;
         }
 
+        var info   = '{"mid":"'+mid+'","msg":"'+obj.msg+'"}';
+
+        log(info)
         //send message
         if (app && type == 'broadcast') {
             var push_list = clients[app];
             for (x in push_list) push_list[x].emit("info",info);
+            redis_io.set(app+"_"+mid,'{"status":"sent"}',redis.print)
 
         } else if (clients[app][id]) {
             clients[app][id].emit('info',info);
+            redis_io.set(app+"_"+mid,'{"status":"sent"}',redis.print)
 
         } else {
             log("user: " + id+" is not online!");
+            redis_io.set(app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
 
         }
 
@@ -125,6 +134,25 @@ ioServer.sockets.on('connection', function(socket) {
 
     })
 
+    socket.on('rev', function(message){
+        log(socket.id+":"+message);
+
+        try{
+            var client_message = JSON.parse(message);
+            var app      = client_message.app,
+                mid      = client_message.mid;
+
+            redis_io.set(app+"_"+mid,'{"status":"recived"}',redis.print)
+
+        } catch (error) {
+            log(error);
+            log('client send invaild json format');
+            return
+        }
+
+    })
+
+
     // When socket disconnects, remove it from the list:
     socket.on('disconnect', function() {
         delete clients[socket.uid];
@@ -143,7 +171,7 @@ setInterval(function() { for(x in unreg_clients) unreg_clients[x].emit("info",'{
 }, 1000);
 
 // timer set for push info to clients
-setInterval(function() {
-    var push_list = clients['msd'];
-    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
-}, 2000);
+//setInterval(function() {
+//    var push_list = clients['msd'];
+//    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
+//}, 2000);
