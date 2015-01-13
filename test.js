@@ -17,5 +17,6 @@ obj[c][d]
 
 */
 
-var a = '{"app","id":"12345"}'
-var b = JSON.parse(a) || {};
+var a = '{"app":"msd","id":1235","type":"broadcast","msg":"hello world"}'
+var b = JSON.parse(a)
+console.info(b.app)

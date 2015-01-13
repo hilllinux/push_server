@@ -199,8 +199,7 @@ ioServer.sockets.on('connection', function(socket) {
 });
 
 /*
- *
- *
+ * 重新发送逻辑
  */
 function resend_message_to_client(msg_index) {
     try{
@@ -236,6 +235,7 @@ function resend_message_to_client(msg_index) {
     } catch(error) {
     }
 }
+
 /*
  * Desc:
  * 定时器：定时要处理的业务逻辑
