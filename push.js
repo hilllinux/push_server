@@ -9,8 +9,8 @@ var redis = require("redis");
 
 // redis 定义2个实例的原因:
 // 一个实例若做了订阅操作，则无法读写缓存操作。
-var redis_client = redis.createClient('6379', '127.0.0.1');
-var redis_io     = redis.createClient('6379', '127.0.0.1');
+var redis_sub_event_handler = redis.createClient('6379', '127.0.0.1');
+var redis_io                = redis.createClient('6379', '127.0.0.1');
 
 /*
  * 打印函数设置
@@ -37,70 +37,75 @@ log('SocketIO > listening on port :3000');
  *
  * 接口说明
  * id   : user_id.
- * app  : the app that the message will be forward.
- * type : p2p or broadcast to clients
+ * app  : app名称.
+ * time : 推送时间.
  * mid  : message id
- * msg  : mssage will be send to client.
+ * msg  : 送达到app的消息体
  *
- * 接口示例 : {"id":"123","app":"msd","type":"single","msg":"hello world"}
+ * 接口示例 : {"user_id":"123","app":"msd","push_time":"0","msg":"hello world"}
  */
 
-redis_client.on("ready", function() {
+redis_sub_event_handler.on("ready", function() {
     log("redis is ready");
     // redis 订阅 msg 这个频道，后期需要将频道设置成配置项
-    redis_client.subscribe("msg");
+    redis_sub_event_handler.subscribe("msg");
 
 })
 
-redis_client.on("message", function(channel, msg){
+redis_sub_event_handler.on("message", function(channel, msg){
+
     log(channel+":"+msg);
 
     // 解析正常格式的 JSON 数据.
     try {
         var obj = JSON.parse(msg);
-        var id     = obj.id,
+        var id     = obj.user_id,
             app    = obj.app,
             mid    = obj.mid,
-            type   = obj.type;
+            info   = obj.msg,
+            time   = obj.push_time;
 
+        // 为安卓客户端构造Json 格式的消息
+        //var info   = '{"mid":"'+mid+'","msg":"'+obj.msg+'"}';
 
-        if (!id || !app || !type || !mid || !(obj.msg)) {
+        if (!id || !app || !time || !mid || !info) {
             log("paramter is not complete!")
             return ;
         }
 
-        log(mid+app);
 
+        // 用户不在线
+        if (!clients[app][id]) {
+            log("user: " + id+" is not online!");
+            // 消息发送失败原因写入缓存;
+            redis_io.set(app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
+        }
 
-        // 为安卓客户端构造Json 格式的消息
-        var info   = '{"mid":"'+mid+'","msg":"'+obj.msg+'"}';
-
-
-        // 发送消息
-        // 按应用群发或者按应用点对点发送，取决于PHP 传过来的消息类型;
-        if (app && type == 'broadcast') {
-            var push_list = clients[app];
-            for (x in push_list) push_list[x].emit("info",info);
-
-            //群发的消息状态写入缓存操作;
-            redis_io.set(app+"_"+mid,'{"status":"sent"}',redis.print)
-
-        } else if (clients[app][id]) {
+        // 即时消息推送
+        if (0==parseInt(time)) {
             clients[app][id].emit('info',info);
 
             //点对点消息状态写入缓存操作;
             redis_io.set(app+"_"+mid,'{"status":"sent"}',redis.print)
+
+            //更新镖师发送时间
+            var user_info = "";
+            var c_date   = new Date();
+            redis_io.get("user_"+id,function(item,value){ user_info = value; });
+
+            user_info = JSON_parse(user_info);
+            user_info.last_push_time = c_date.getTime();
+
+            redis_io.set("user_"+id,JSON.stringify(user_info));
 
             // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
             // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
             if (!(message_query[app+"_"+mid])) message_query[app+"_"+mid] = msg;
 
         } else {
-            log("user: " + id+" is not online!");
-
-            // 消息发送失败原因写入缓存;
-            redis_io.set(app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
-
+            // 缓存消息队列中；
+            // 每个用户维护缓存队列
+            redis_io.rpush(app+"_"+id,msg);
         }
 
     } catch (error) {
@@ -207,17 +212,10 @@ function resend_message_to_client(msg_index) {
         log("resend:"+message_query[msg_index]);
 
         var obj = JSON.parse(message_query[msg_index]);
-        var id     = obj.id,
+        var id     = obj.user_id,
             app    = obj.app,
+            info   = obj.msg,
             mid    = obj.mid;
-
-        if (!id || !app || !mid || !(obj.msg)) {
-            log("paramter is not complete!")
-            return ;
-        }
-
-        // 为安卓客户端构造Json 格式的消息
-        var info   = '{"mid":"'+mid+'","msg":"'+obj.msg+'"}';
 
         if (clients[app][id]) {
             clients[app][id].emit('info',info);
@@ -233,21 +231,97 @@ function resend_message_to_client(msg_index) {
             redis_io.set(app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
         }
     } catch(error) {
+
+        log("重发失败");
+        log(error);
     }
 }
 
+function message_handler(message) {
+
+    var obj = JSON.parse(message);
+    var c_date = new Date();
+    var c_time = c_date.getTime();
+
+    var id     = obj.user_id,
+        app    = obj.app,
+        info   = obj.msg,
+        time   = obj.push_time,
+        o_id   = obj.order_id,
+        mid    = obj.mid;
+    var state  = 1;
+    redis_io.get("order_"+o_id,function(item,value){
+        state = value;
+    });
+    if (state) state = parseInt(state);
+
+
+    // 如果订单被抢, 提示推送下一条
+    if (1 == state) return 0;
+
+    if (parseInt(time) > parseInt(c_time)) return 2;
+    
+    // 如果订单未被抢，推送消息
+    clients[app][id].emit('info',info);
+
+    //点对点消息状态写入缓存操作;
+    redis_io.set(app+"_"+mid,'{"status":"sent"}',redis.print)
+
+    //更新镖师发送时间
+    var user_info = "";
+    var c_date   = new Date();
+    redis_io.get("user_"+id,function(item,value){ user_info = value; });
+
+    user_info = JSON_parse(user_info);
+    user_info.last_push_time = c_date.getTime();
+
+    redis_io.set("user_"+id,JSON.stringify(user_info));
+
+    // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
+    // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
+    if (!(message_query[app+"_"+mid])) message_query[app+"_"+mid] = msg;
+
+    return 1;
+}
 /*
  * Desc:
  * 定时器：定时要处理的业务逻辑
  * 定时的时间间隔将作为配置项处理
  */
 
+
+setInterval(function() { 
+    var push_list = clients['msd'];
+    for (x in push_list){ 
+        var socket = push_list[x];
+        var id  = socket.id,
+            app = socket.app;
+
+        var length = 0;
+        redis_io.llen(app+"_"+id, function(item,value){ length = value });
+        length = parseInt(length);
+
+        var send_flag = 0,
+            message   = "";
+
+        for (var i = 0;i < length; i++ ) {
+            redis_io.lpop(app+"_"+id, function(item, value){
+                message = value;
+                send_flag = message_handler(value);
+            });
+            if (2 == send_flag) redis_io.rpush(app+"_"+id, message); // 时间未到；
+            //if (1 == send_flag) break;
+        } 
+    }
+
+    // 时间可以配置
+}, 1000);
+
 setInterval(function() { 
     // 通知未注册用户注册
     for(x in unreg_clients) unreg_clients[x].emit("info",'{"msg":"unreg"}');
     // 未送达消息重发逻辑
     for(x in message_query) resend_message_to_client(x);
-
 //    var push_list = clients['msd'];
 //    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
 }, 2000);
