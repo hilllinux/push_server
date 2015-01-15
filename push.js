@@ -87,14 +87,15 @@ redis_sub_event_handler.on("message", function(channel, msg){
             redis_io.set("msg_"+mid,'{"status":"sent"}',redis.print)
 
             //更新镖师发送时间
-            var user_info = "";
-            var c_date   = new Date();
-            redis_io.get("user_"+id,function(item,value){ user_info = value; });
-
-            user_info = JSON_parse(user_info);
-            user_info.last_push_time = c_date.getTime();
-
-            redis_io.set("user_"+id,JSON.stringify(user_info));
+            redis_io.get("user_"+id,function(item,user_info){ 
+                if(user_info) {
+                    var c_date   = new Date();
+                    user_info = JSON_parse(user_info);
+                    user_info.last_push_time = c_date.getTime();
+                    // 缓存中更新
+                    redis_io.set("user_"+id,JSON.stringify(user_info));
+                }
+            });
 
             // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
             // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
@@ -103,6 +104,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
         } else {
             // 缓存消息队列中；
             // 每个用户维护缓存队列
+            log(msg+" is cached to user:" + id);
             redis_io.rpush("message_list_"+id,msg);
         }
 
@@ -229,8 +231,8 @@ function resend_message_to_client(msg_index) {
     }
 }
 
-function message_handler(message) {
-
+function message_handler(item, message) {
+    log("message_handler:"+message);
     var obj = JSON.parse(message);
     var c_date = new Date();
     var c_time = c_date.getTime();
@@ -240,37 +242,36 @@ function message_handler(message) {
         time   = obj.push_time,
         o_id   = obj.order_id,
         mid    = obj.mid;
-    var state  = 1;
-    redis_io.get("order_"+o_id,function(item,value){
-        state = value;
+
+    redis_io.get("order_"+o_id,function(item,state){
+
+        if (!state) return;
+        if (parseInt(state) == 1) return; //订单被抢；
+
+        if (parseInt(time) > parseInt(c_time)) {
+            redis_io.rpush("message_list_"+id, message); // 时间未到；
+            return;
+        }
+
+        // 如果订单未被抢，推送消息
+        clients[id].emit('info',info);
+        //点对点消息状态写入缓存操作;
+        redis_io.set("msg_"+mid,'{"status":"sent"}',redis.print)
+        //更新镖师发送时间
+        redis_io.get("user_"+id,function(item,user_info){ 
+            if(user_info) {
+                var c_date   = new Date();
+                user_info = JSON_parse(user_info);
+                user_info.last_push_time = c_date.getTime();
+                // 缓存中更新
+                redis_io.set("user_"+id,JSON.stringify(user_info));
+            }
+        });
+
+        // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
+        // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
+        if (!(message_query["msg_"+mid])) message_query["msg_"+mid] = message;
     });
-    if (state) state = parseInt(state);
-
-
-    // 如果订单被抢, 提示推送下一条
-    if (1 == state) return 0;
-
-    if (parseInt(time) > parseInt(c_time)) return 2;
-    
-    // 如果订单未被抢，推送消息
-    clients[id].emit('info',info);
-
-    //点对点消息状态写入缓存操作;
-    redis_io.set("msg_"+mid,'{"status":"sent"}',redis.print)
-
-    //更新镖师发送时间
-    var user_info = "";
-    var c_date   = new Date();
-    redis_io.get("user_"+id,function(item,value){ user_info = value; });
-
-    user_info = JSON_parse(user_info);
-    user_info.last_push_time = c_date.getTime();
-
-    redis_io.set("user_"+id,JSON.stringify(user_info));
-
-    // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
-    // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
-    if (!(message_query["msg_"+mid])) message_query["msg_"+mid] = msg;
 
     return 1;
 }
@@ -282,28 +283,21 @@ function message_handler(message) {
 
 
 setInterval(function() { 
-    var push_list = clients['msd'];
+    var push_list = clients;
     for (x in push_list){ 
         var socket = push_list[x];
-        var id  = socket.id;
+        var id  = socket.uid;
 
         var length = 0;
-        redis_io.llen("message_list_"+id, function(item,value){ length = value });
-        length = parseInt(length);
+        redis_io.llen("message_list_"+id, function(item,value){ 
+            length = parseInt(value);
+            log(length)
 
-        var send_flag = 0,
-            message   = "";
-
-        for (var i = 0;i < length; i++ ) {
-            redis_io.lpop("message_list_"+id, function(item, value){
-                message = value;
-                send_flag = message_handler(value);
-            });
-            if (2 == send_flag) redis_io.rpush("message_list_"+id, message); // 时间未到；
-            //if (1 == send_flag) break;
-        } 
+            for (var i = 0;i < length; i++ ) {
+                redis_io.lpop("message_list_"+id, message_handler(item,value));
+            } 
+        });
     }
-
     // 时间可以配置
 }, 1000);
 

@@ -4,17 +4,17 @@ var
 
 ioClient.on('info', function(msg) {
     console.info(msg);
-    try {
-      var aa = JSON.parse(msg);
-      var app = "msd",
-          mid = aa.mid;
-    if ( !app || !mid) return;
+   // try {
+   //   var aa = JSON.parse(msg);
+   //   var app = "msd",
+   //       mid = aa.mid;
+   // if ( !app || !mid) return;
 
-      ioClient.emit('rev','{"app":"'+app+'","mid":"'+mid+'"}')
-      console.info("snd");
-    } catch (error) {
-      console.info(error);
-    }
+   //   //ioClient.emit('rev','{"app":"'+app+'","mid":"'+mid+'"}')
+   //   console.info("snd");
+   // } catch (error) {
+   //   console.info(error);
+   // }
 
 });
 
