@@ -28,18 +28,26 @@ loop do
                 order_detail = JSON.parse(order)
                 next if order_detail["state"].to_i == 1
 
+                if message_detail["push_time"].to_i <= Time.now.to_i 
+                    redis.publish(Channel,message)
+                    # 更新镖师信息
+                    user_info = redis.get(%Q{user_#{message_detail["user_id"]}})
+                    if user_info then
+                        user_info_detail = JSON.parse(user_info)
+                        user_info_detail["push_time"] = Time.now.to_i
+                        p user_info_detail
+                        redis.set(%Q{user_#{message_detail["user_id"]}},JSON.generate(user_info_detail))
+                    end
+                    p "messsage sent to client"
+                    break
+                else
+                    redis.rpush(message_list_tag,message)
+                    p "push back to list"
+                end
+
             rescue JSON::ParserError,SystemCallError
                 p "json format error"
                 next
-            end
-
-            if message_detail["push_time"].to_i <= Time.now.to_i 
-                redis.publish(Channel,message)
-                p "messsage sent to client"
-                break
-            else
-                redis.rpush(message_list_tag,message)
-                p "push back to list"
             end
         }
     }
