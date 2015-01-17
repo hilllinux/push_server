@@ -130,6 +130,8 @@ ioServer.sockets.on('connection', function(socket) {
             socket.uid = user_id;
             clients[user_id]=socket;
 
+            redis_io.rpush("user_list",user_id);
+
             // 从未注册列表中删除已注册的socket 实例
             var index = unreg_clients.indexOf(socket);
             if (index != -1) {
@@ -175,6 +177,7 @@ ioServer.sockets.on('connection', function(socket) {
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
         delete clients[socket.uid];
+        redis_io.lrem("user_list",socket.uid);
         log('Client gone (id=' + socket.uid + ').');
     });
 
