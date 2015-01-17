@@ -18,5 +18,5 @@ ioClient.on('info', function(msg) {
 
 });
 
-ioClient.emit('reg','{"app":"msd","id":"1235"}')
+ioClient.emit('reg','{"app":"msd","id":"1234"}')
 //ioClient.emit('mailto',"12","hello")
