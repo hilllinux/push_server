@@ -177,7 +177,7 @@ ioServer.sockets.on('connection', function(socket) {
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
         delete clients[socket.uid];
-        redis_io.lrem("user_list",socket.uid,0);
+        redis_io.lrem("user_list",0,socket.uid);
         log('Client gone (id=' + socket.uid + ').');
     });
 
