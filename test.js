@@ -17,6 +17,15 @@ obj[c][d]
 
 */
 
-var a = '{"app":"msd","id":1235","type":"broadcast","msg":"hello world"}'
-var b = JSON.parse(a)
-console.info(b.app)
+var redis = require("redis");
+
+// redis 定义2个实例的原因:
+// 一个实例若做了订阅操作，则无法读写缓存操作。
+var redis_io     = redis.createClient('6379', '127.0.0.1');
+
+redis_io.zset("key",1)
+redis_io.lpop("key",function(item, value){
+
+  console.info(value)
+
+});

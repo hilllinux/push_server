@@ -60,14 +60,13 @@ redis_sub_event_handler.on("message", function(channel, msg){
         var obj = JSON.parse(msg);
         var id     = obj.user_id,
             mid    = obj.mid,
-            info   = obj.msg,
-            time   = obj.push_time;
+            info   = obj.msg;
 
         // 为安卓客户端构造Json 格式的消息
         //var info   = '{"mid":"'+mid+'","msg":"'+obj.msg+'"}';
 
-        if (!id || !time || !mid || !info) {
-            log("paramter is not complete!")
+        if (!id || !mid || !info) {
+            log("JSON 格式不完整");
             return ;
         }
 
@@ -80,33 +79,16 @@ redis_sub_event_handler.on("message", function(channel, msg){
         }
 
         // 即时消息推送
-        if (0==parseInt(time)) {
-            clients[id].emit('info',info);
+        log("发送消息:"+info)
+        clients[id].emit('info',info);
 
-            //点对点消息状态写入缓存操作;
-            redis_io.set("msg_"+mid,'{"status":"sent"}',redis.print)
+        //点对点消息状态写入缓存操作;
+        redis_io.set("msg_"+mid,'{"status":"sent"}',redis.print)
 
-            //更新镖师发送时间
-            redis_io.get("user_"+id,function(item,user_info){ 
-                if(user_info) {
-                    var c_date   = new Date();
-                    user_info = JSON_parse(user_info);
-                    user_info.last_push_time = c_date.getTime();
-                    // 缓存中更新
-                    redis_io.set("user_"+id,JSON.stringify(user_info));
-                }
-            });
+        // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
+        // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
+        if (!(message_query["msg_"+mid])) message_query["msg_"+mid] = msg;
 
-            // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
-            // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
-            if (!(message_query["msg_"+mid])) message_query["msg_"+mid] = msg;
-
-        } else {
-            // 缓存消息队列中；
-            // 每个用户维护缓存队列
-            log(msg+" is cached to user:" + id);
-            redis_io.rpush("message_list_"+id,msg);
-        }
 
     } catch (error) {
         log(error);
@@ -204,7 +186,7 @@ ioServer.sockets.on('connection', function(socket) {
 function resend_message_to_client(msg_index) {
     try{
 
-        log("resend:"+message_query[msg_index]);
+//        log("resend:"+message_query[msg_index]);
 
         var obj = JSON.parse(message_query[msg_index]);
         var id     = obj.user_id,
@@ -212,8 +194,8 @@ function resend_message_to_client(msg_index) {
             mid    = obj.mid;
 
         if (clients[id]) {
+            log("resend to :" +id+";msg: "+info);
             clients[id].emit('info',info);
-            // counter++
 
         } else {
             log("user: " + id+" is not online!");
@@ -231,75 +213,11 @@ function resend_message_to_client(msg_index) {
     }
 }
 
-function message_handler(item, message) {
-    log("message_handler:"+message);
-    var obj = JSON.parse(message);
-    var c_date = new Date();
-    var c_time = c_date.getTime();
-
-    var id     = obj.user_id,
-        info   = obj.msg,
-        time   = obj.push_time,
-        o_id   = obj.order_id,
-        mid    = obj.mid;
-
-    redis_io.get("order_"+o_id,function(item,state){
-
-        if (!state) return;
-        if (parseInt(state) == 1) return; //订单被抢；
-
-        if (parseInt(time) > parseInt(c_time)) {
-            redis_io.rpush("message_list_"+id, message); // 时间未到；
-            return;
-        }
-
-        // 如果订单未被抢，推送消息
-        clients[id].emit('info',info);
-        //点对点消息状态写入缓存操作;
-        redis_io.set("msg_"+mid,'{"status":"sent"}',redis.print)
-        //更新镖师发送时间
-        redis_io.get("user_"+id,function(item,user_info){ 
-            if(user_info) {
-                var c_date   = new Date();
-                user_info = JSON_parse(user_info);
-                user_info.last_push_time = c_date.getTime();
-                // 缓存中更新
-                redis_io.set("user_"+id,JSON.stringify(user_info));
-            }
-        });
-
-        // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
-        // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
-        if (!(message_query["msg_"+mid])) message_query["msg_"+mid] = message;
-    });
-
-    return 1;
-}
 /*
  * Desc:
  * 定时器：定时要处理的业务逻辑
  * 定时的时间间隔将作为配置项处理
  */
-
-
-setInterval(function() { 
-    var push_list = clients;
-    for (x in push_list){ 
-        var socket = push_list[x];
-        var id  = socket.uid;
-
-        var length = 0;
-        redis_io.llen("message_list_"+id, function(item,value){ 
-            length = parseInt(value);
-            log(length)
-
-            for (var i = 0;i < length; i++ ) {
-                redis_io.lpop("message_list_"+id, message_handler(item,value));
-            } 
-        });
-    }
-    // 时间可以配置
-}, 1000);
 
 setInterval(function() { 
     // 通知未注册用户注册
@@ -308,5 +226,6 @@ setInterval(function() {
     for(x in message_query) resend_message_to_client(x);
 //    var push_list = clients;
 //    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
+    // 时间可以配置
 }, 2000);
 
