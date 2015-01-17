@@ -3,19 +3,24 @@ var
     //ioClient = io.connect('http://121.40.192.185:3000');
     ioClient = io.connect('http://localhost:3000');
 
+var counter = 0;
 ioClient.on('info', function(msg) {
     console.info(msg);
-   // try {
-   //   var aa = JSON.parse(msg);
-   //   var app = "msd",
-   //       mid = aa.mid;
-   // if ( !app || !mid) return;
+    counter++;
+    console.info(counter);
+    if(counter == 4) {
+        counter = 0;
+        try {
+          var aa = JSON.parse(msg);
+          var app = "msd",
+              mid = aa.mid;
+        if ( !app || !mid) return;
 
-   //   //ioClient.emit('rev','{"app":"'+app+'","mid":"'+mid+'"}')
-   //   console.info("snd");
-   // } catch (error) {
-   //   console.info(error);
-   // }
+          ioClient.emit('rev','{"app":"'+app+'","mid":"'+mid+'"}')
+        } catch (error) {
+          console.info(error);
+        }
+    }
 
 });
 

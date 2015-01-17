@@ -20,7 +20,6 @@ loop do
             begin
                 message_detail = JSON.parse(message) if message
                 next if not message_detail
-                p message_detail
 
                 # 订单不存在或者订单状态被抢，则移除该消息
                 order = redis.get(%Q{#{order_prefix}#{message_detail["order_id"]}})
@@ -31,6 +30,8 @@ loop do
                 if message_detail["push_time"].to_i <= Time.now.to_i 
                     redis.publish(Channel,message)
                     # 更新镖师信息
+                    p %Q{client(#{message_detail["user_id"]}):#{message}}
+
                     user_info = redis.get(%Q{user_#{message_detail["user_id"]}})
                     if user_info then
                         user_info_detail = JSON.parse(user_info)
@@ -38,7 +39,6 @@ loop do
                         p user_info_detail
                         redis.set(%Q{user_#{message_detail["user_id"]}},JSON.generate(user_info_detail))
                     end
-                    p "messsage sent to client"
                     break
                 else
                     redis.rpush(message_list_tag,message)

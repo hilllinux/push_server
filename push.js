@@ -78,6 +78,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
             redis_io.set("msg_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
         }
 
+        info = JSON.stringify(info);
         // 即时消息推送
         log("向用户(id="+id+")推送消息:"+info);
         clients[id].emit('info',info);
@@ -161,12 +162,11 @@ ioServer.sockets.on('connection', function(socket) {
     // 缓存中标记 该消息已经送达客户端
     socket.on('rev', function(message){
 
-        log("收到用户(id="+socket.uid+")的消息确认请求");
 
         try{
             var client_message = JSON.parse(message);
             var mid      = client_message.mid;
-
+            log("收到用户(id="+socket.uid+") 对消息(mid_"+mid+")确认请求");
             // 消息队列中移除已发送的消息
             delete message_query["msg_"+mid];
             // 缓存中更新消息状态
@@ -197,7 +197,8 @@ function resend_message_to_client(msg_index) {
 
     var counter = message_query[msg_index]["counter"];
     if (counter == 5) {
-        delete message_query["msg_"+mid];
+        message_query[msg_index]["counter"] = 0;
+        delete message_query[msg_index];
         return;
     }
 
@@ -205,7 +206,7 @@ function resend_message_to_client(msg_index) {
 
         var obj = JSON.parse(message_query[msg_index]["msg"]);
         var id     = obj.user_id,
-            info   = obj.msg,
+            info   = JSON.stringify(obj.msg),
             mid    = obj.mid;
 
         if (clients[id]) {
@@ -218,7 +219,7 @@ function resend_message_to_client(msg_index) {
         } else {
             log("用户: " + id+" 不在线，推送失败");
             // 用户不在线，删除推送消息对象
-            delete message_query["msg_"+mid];
+            delete message_query[msg_index];
 
             // 消息发送失败原因写入缓存;
             redis_io.set("msg_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
