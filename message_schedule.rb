@@ -2,7 +2,7 @@ require 'redis'
 require 'json'
 require 'daemons'
 
-user_list_tag = "user_list"
+user_list_tag = "msd_user_list"
 message_list_prefix = "message_list_"
 order_prefix = "order_"
 Channel = "msg"
@@ -14,7 +14,7 @@ loop do
         message_list_tag = %Q{#{message_list_prefix}#{x}}
         len = redis.llen(message_list_tag)
         next if len == 0
-        
+
         0.upto(len) {
             message = redis.lpop(message_list_tag) 
             begin
