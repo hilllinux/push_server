@@ -130,6 +130,11 @@ ioServer.sockets.on('connection', function(socket) {
     // 消息格式：{"app":"msd","id":"123"}
     socket.on('reg', function(message){
         log("收到APP用户注册请求");
+        
+        if(socket.uid) { 
+            log("用户("+socket.uid+")已经注册") 
+            return;
+        }
 
         try{
             var client_message = JSON.parse(message);
