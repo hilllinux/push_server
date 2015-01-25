@@ -143,12 +143,13 @@ ioServer.sockets.on('connection', function(socket) {
 
             if (!clients[app]) clients[app]={};
 
+            // 将用户ID 增加到在线列表中
+            if(!clients[app][user_id]) redis_io.rpush(app+"_user_list",user_id);
+
             socket.uid = user_id;
             socket.app = app;
             clients[app][user_id]=socket;
 
-            // 将用户ID 增加到在线列表中
-            redis_io.rpush(app+"_user_list",user_id);
 
             // 从未注册列表中删除已注册的socket 实例
             var index = unreg_clients.indexOf(socket);
