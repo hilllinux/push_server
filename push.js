@@ -123,7 +123,7 @@ ioServer.sockets.on('connection', function(socket) {
         // 将 socket 实例加入到未注册列表中;
         unreg_clients.push(socket);
         // 消息推送到客户端提醒注册；
-        socket.emit('info','{"msg":"unreg"}');
+        socket.emit('reg','{"msg":"unreg"}');
     }
 
     // APP 端用户socket 和 client ID 绑定流程；
@@ -260,7 +260,7 @@ function resend_message_to_client(msg_index) {
 
 setInterval(function() { 
     // 通知未注册用户注册
-    for(x in unreg_clients) unreg_clients[x].emit("info",'{"msg":"unreg"}');
+    for(x in unreg_clients) unreg_clients[x].emit("reg",'{"msg":"unreg"}');
     // 未送达消息重发逻辑
     for(x in message_query) resend_message_to_client(x);
 //    var push_list = clients;
