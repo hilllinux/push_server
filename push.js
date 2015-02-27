@@ -164,7 +164,7 @@ ioServer.sockets.on('connection', function(socket) {
             }
 
             // 消息推送客户端注册成功；
-            socket.emit('info', '{"msg":"connected"}');
+            socket.emit('reg', '{"msg":"connected"}');
 
         } catch (error) {
             log(error);
@@ -185,7 +185,7 @@ ioServer.sockets.on('connection', function(socket) {
             var mid      = client_message.mid,
                 app      = client_message.app;
 
-            if (! mid || !app) {
+            if (!id || !app) {
                 log("JSON 格式不完整");
                 return ;
             }

@@ -1,8 +1,8 @@
 var
     io = require('socket.io-client'),
-//    ioClient = io.connect('http://121.40.192.185:3000');
+    ioClient = io.connect('http://121.40.192.185:3000');
 //    ioClient = io.connect('http://test.yimood.com');
-    ioClient = io.connect('http://localhost:3000');
+//    ioClient = io.connect('http://localhost:3000');
 
 var counter = 0;
 ioClient.on('reg',function(msg){
