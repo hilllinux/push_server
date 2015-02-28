@@ -5,7 +5,7 @@ require 'daemons'
 
 redis      = Redis.new
 Channel    = "msg"
-Path       = "/Users/wsq/workspace/nodjs/push_server/log"
+Path       = "./log"
 SLEEP_TIME = 1
 REDIS_WAIT_TIME     = 5
 user_list_tag       = "msd_user_list"
@@ -90,5 +90,5 @@ loop do
     }
 
     # 减少服务器压力，休息1s
-    sleep SLEEP_TIME 
+    sleep SLEEP_TIME
 end
