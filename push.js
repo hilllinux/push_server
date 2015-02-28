@@ -77,6 +77,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
             log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
             // 消息发送失败原因写入缓存;
             redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
+            return;
         }
 
         info = JSON.stringify(info);
@@ -250,6 +251,7 @@ function resend_message_to_client(msg_index) {
 
             // 消息发送失败原因写入缓存;
             redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
+            return;
         }
     } catch(error) {
 
