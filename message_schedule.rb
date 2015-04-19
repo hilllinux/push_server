@@ -6,7 +6,7 @@ require 'mysql'
 
 redis_obj  = Redis.new
 Channel    = "msg"
-Path       = "./log"
+Path       = "/home/wangsongqing/push_server/log"
 
 # 时间设置
 SLEEP_TIME          = 1
@@ -44,12 +44,13 @@ def log message
     end
 end
 
-def set_merchat_to_offline merchat_id
+def set_merchat_to_offline merchant_id
     begin
         # connect to the   server
         dbh = Mysql.real_connect(HOSTNAME, USERNAME, PASSWORD, DATABASE, PORT)
         # get server version string and display it
         sql_state = "UPDATE tp_merchant SET online = 0 WHERE merchant_id = #{merchant_id}"
+        log sql_state
         dbh.query(sql_state)
     rescue MysqlError => e
         log "mysql---->Error code: #{e.errno} \n     ---->Error message: #{e.error}"
@@ -67,8 +68,9 @@ end
 def merchant_check redis
     #如果离线时间大于设置时间，则标识为离线
     begin
-        redis.hkeys.each { |item|
+        redis.hkeys(MERCHART_LIST).each { |item|
             value = redis.hget(MERCHART_LIST, item)
+
             if value and value.to_i != 0 and value.to_i + MERCHANT_LEFT_TIME < Time.now.to_i then 
                 log %Q{merchant(#{item}) is set to offline}
                 set_merchat_to_offline item

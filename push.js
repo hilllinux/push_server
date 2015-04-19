@@ -224,7 +224,8 @@ ioServer.sockets.on('connection', function(socket) {
             if (socket.role) {
                 //角色离线，更新离线时间
                 var myDate=new Date();
-                redis_io.hset(socket.app+"_"+socket.role+"_list", socket.uid, myDate.getTime());
+                var value = myDate.getTime()/1000;
+                redis_io.hset(socket.app+"_"+socket.role+"_list",socket.uid, value);
             }
         }
     });
