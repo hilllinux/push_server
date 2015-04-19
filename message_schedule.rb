@@ -20,7 +20,7 @@ MESSAGE_LIST_PREFIX = "fm_push_list_"
 ORDER_PREFIX        = "order_"
 PUSH_LIST_PREFIX    = "push_list_"
 MERCHART_LIST       = "msd_merchant_list"
-FOOT_MAN_LIST       = "msd_foot_man_list"
+FOOT_MAN_LIST       = "msd_footman_list"
 
 # 数据库信息
 HOSTNAME            = "localhost"
@@ -66,12 +66,18 @@ end
 
 def merchant_check redis
     #如果离线时间大于设置时间，则标识为离线
-    redis.hkeys.each { |item|
-        value = redis.hget(MERCHART_LIST, item)
-        if value && value.to_i + MERCHANT_LEFT_TIME < Time.now.to_i then 
-            set_merchat_to_offline item
-        end
-    }
+    begin
+        redis.hkeys.each { |item|
+            value = redis.hget(MERCHART_LIST, item)
+            if value and value.to_i != 0 and value.to_i + MERCHANT_LEFT_TIME < Time.now.to_i then 
+                log %Q{merchant(#{item}) is set to offline}
+                set_merchat_to_offline item
+                redis.hdel(MERCHART_LIST, item)
+            end
+        }
+    rescue Exception => e
+        log e.message
+    end
 end
 
 def footman_check redis
