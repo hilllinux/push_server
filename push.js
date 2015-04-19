@@ -76,7 +76,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
         if (!clients[app][id]) {
             log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
             // 消息发送失败原因写入缓存;
-            redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
+           // redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
             return;
         }
 
@@ -86,7 +86,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
         clients[app][id].emit('info',info);
 
         //点对点消息状态写入缓存操作;
-        redis_io.set("msg_"+app+"_"+mid,'{"status":"sent"}',redis.print)
+        //redis_io.set("msg_"+app+"_"+mid,'{"status":"sent"}',redis.print)
 
         // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
         // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
@@ -134,26 +134,33 @@ ioServer.sockets.on('connection', function(socket) {
         
         if(socket.uid) { 
             log("用户("+socket.uid+")已经注册") 
+            socket.emit('reg', '{"msg":"connected"}');
             return;
         }
 
         try{
             var client_message = JSON.parse(message);
             var user_id  = client_message.id,
-                app      = client_message.app;
+                app      = client_message.app,
+                role_type= client_message.role;
 
             if (!user_id || !app) {
-                log("JSON 格式不完整");
+                log("JSON 格式不完整 2");
                 return ;
             }
 
-            if (!clients[app]) clients[app]={};
-
-            // 将用户ID 增加到在线列表中
-            if(!clients[app][user_id]) redis_io.rpush(app+"_user_list",user_id);
+            if (role_type) {
+                // e.g. redis.hset(msd_fm_list , 7000, 0)
+                redis_io.hset(app+"_"+role_type+"_list", user_id, 0);
+                socket.role = role_type;
+            }
 
             socket.uid = user_id;
             socket.app = app;
+
+            // 将用户ID 增加到在线列表中
+            if (!clients[app]) clients[app]={};
+            if (!clients[app][user_id]) redis_io.rpush(app+"_user_list",user_id);
             clients[app][user_id]=socket;
 
 
@@ -180,14 +187,15 @@ ioServer.sockets.on('connection', function(socket) {
     // 缓存中标记 该消息已经送达客户端
     socket.on('rev', function(message){
 
+        log(message);
 
         try{
             var client_message = JSON.parse(message);
             var mid      = client_message.mid,
                 app      = client_message.app;
 
-            if (!id || !app) {
-                log("JSON 格式不完整");
+            if (!mid || !app) {
+                log("JSON 格式不完整 3");
                 return ;
             }
 
@@ -195,7 +203,7 @@ ioServer.sockets.on('connection', function(socket) {
             // 消息队列中移除已发送的消息
             delete message_query["msg_"+app+"_"+mid];
             // 缓存中更新消息状态
-            redis_io.set("msg_"+app+"_"+mid,'{"status":"recived"}',redis.print)
+            //redis_io.set("msg_"+app+"_"+mid,'{"status":"recived"}',redis.print)
 
         } catch (error) {
             log(error);
@@ -212,6 +220,12 @@ ioServer.sockets.on('connection', function(socket) {
             delete clients[socket.app][socket.uid];
             redis_io.lrem(socket.app+"_user_list",0,socket.uid,redis.print);
             log("["+socket.app+"]的用户(id="+socket.uid+")已经离线");
+
+            if (socket.role) {
+                //角色离线，更新离线时间
+                var myDate=new Date();
+                redis_io.hset(socket.app+"_"+socket.role+"_list", socket.uid, myDate.getTime());
+            }
         }
     });
 
@@ -250,8 +264,7 @@ function resend_message_to_client(msg_index) {
             delete message_query[msg_index];
 
             // 消息发送失败原因写入缓存;
-            redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
-            return;
+            //redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
         }
     } catch(error) {
 
@@ -270,7 +283,7 @@ setInterval(function() {
     // 通知未注册用户注册
     for(x in unreg_clients) unreg_clients[x].emit("reg",'{"msg":"unreg"}');
     // 未送达消息重发逻辑
-    for(x in message_query) resend_message_to_client(x);
+//    for(x in message_query) resend_message_to_client(x);
 //    var push_list = clients;
 //    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
     // 时间可以配置
