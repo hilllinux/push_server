@@ -76,14 +76,24 @@ redis_sub_event_handler.on("message", function(channel, msg){
         if (!clients[app][id]) {
             log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
             // 消息发送失败原因写入缓存;
-           // redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
+            // redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
             return;
         }
 
         info = JSON.stringify(info);
         // 即时消息推送
         log("向["+app+"]的用户(id="+id+")推送消息:"+info);
-        clients[app][id].emit('info',info);
+
+        try {
+            clients[app][id].emit('info',info);
+
+        } catch (error) {
+            // 发送失败，加入到重发列表
+            if (app == "msd") {
+                log("用户(id="+id+") 不在线，加入到重发列表:"+msg);
+                redis_io.rpush(app+"_"+"resend_list", msg)
+            }
+        }
 
         //点对点消息状态写入缓存操作;
         //redis_io.set("msg_"+app+"_"+mid,'{"status":"sent"}',redis.print)
@@ -163,7 +173,6 @@ ioServer.sockets.on('connection', function(socket) {
             if (!clients[app][user_id]) redis_io.rpush(app+"_user_list",user_id);
             clients[app][user_id]=socket;
 
-
             // 从未注册列表中删除已注册的socket 实例
             var index = unreg_clients.indexOf(socket);
             if (index != -1) {
@@ -213,12 +222,14 @@ ioServer.sockets.on('connection', function(socket) {
 
     })
 
-
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
-        var orign_socket = clients[socket.app][socket.uid]
+        // socket 未注册，直接退出逻辑
+        if (!socket.uid || !socket.app) return;
+        // 获取列表中socket
+        var socket_in_list = clients[socket.app][socket.uid]
         // 如果 socket id 不相等，则是新的 socket 进来
-        if (orign_socket.id != socket.id) return;
+        if (socket_in_list.id != socket.id) return;
 
         if (socket.uid) {
             delete clients[socket.app][socket.uid];
@@ -266,7 +277,7 @@ function resend_message_to_client(msg_index) {
         } else {
             log("["+app+"]的用户("+id+")不在线，推送失败");
             // 用户不在线，删除推送消息对象
-            delete message_query[msg_index];
+            // delete message_query[msg_index];
 
             // 消息发送失败原因写入缓存;
             //redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
@@ -288,7 +299,7 @@ setInterval(function() {
     // 通知未注册用户注册
     for(x in unreg_clients) unreg_clients[x].emit("reg",'{"msg":"unreg"}');
     // 未送达消息重发逻辑
-    for(x in message_query) resend_message_to_client(x);
+//    for(x in message_query) resend_message_to_client(x);
 //    var push_list = clients;
 //    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
     // 时间可以配置
