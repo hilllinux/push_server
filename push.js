@@ -216,6 +216,10 @@ ioServer.sockets.on('connection', function(socket) {
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
+        var orign_socket = clients[socket.app][socket.uid]
+        // 如果 socket id 不相等，则是新的 socket 进来
+        if (orign_socket.id != socket.id) return;
+
         if (socket.uid) {
             delete clients[socket.app][socket.uid];
             redis_io.lrem(socket.app+"_user_list",0,socket.uid,redis.print);
@@ -284,7 +288,7 @@ setInterval(function() {
     // 通知未注册用户注册
     for(x in unreg_clients) unreg_clients[x].emit("reg",'{"msg":"unreg"}');
     // 未送达消息重发逻辑
-//    for(x in message_query) resend_message_to_client(x);
+    for(x in message_query) resend_message_to_client(x);
 //    var push_list = clients;
 //    for (x in push_list) push_list[x].emit("info",'{"msg":"this is message from server"}');
     // 时间可以配置
