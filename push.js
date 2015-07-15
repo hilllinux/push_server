@@ -90,7 +90,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
         } catch (error) {
             // 发送失败，加入到重发列表
             if (app == "msd") {
-                log("用户(id="+id+") 不在线，加入到重发列表:"+msg);
+                log("["+app+"]用户(id="+id+") 不在线，加入到重发列表:"+msg);
                 redis_io.rpush(app+"_"+"resend_list", msg)
             }
         }
@@ -140,10 +140,10 @@ ioServer.sockets.on('connection', function(socket) {
     // APP 端用户socket 和 client ID 绑定流程；
     // 消息格式：{"app":"msd","id":"123"}
     socket.on('reg', function(message){
-        log("收到APP用户注册请求");
+        log("收到APP用户注册请求"+message);
         
         if(socket.uid) { 
-            log("用户("+socket.uid+")已经注册") 
+            log("["+socket.app+"]用户("+socket.uid+")已经注册") 
             socket.emit('reg', '{"msg":"connected"}');
             return;
         }
@@ -224,24 +224,30 @@ ioServer.sockets.on('connection', function(socket) {
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
-        // socket 未注册，直接退出逻辑
-        if (!socket.uid || !socket.app) return;
-        // 获取列表中socket
-        var socket_in_list = clients[socket.app][socket.uid]
-        // 如果 socket id 不相等，则是新的 socket 进来
-        if (socket_in_list.id != socket.id) return;
+        try{
+            // socket 未注册，直接退出逻辑
+            if (!socket.uid || !socket.app) return;
+            // 获取列表中socket
+            var socket_in_list = clients[socket.app][socket.uid]
 
-        if (socket.uid) {
-            delete clients[socket.app][socket.uid];
-            redis_io.lrem(socket.app+"_user_list",0,socket.uid,redis.print);
-            log("["+socket.app+"]的用户(id="+socket.uid+")已经离线");
+            // 如果 socket id 不相等，则是新的 socket 进来
+            if (socket_in_list.id  && socket_in_list.id != socket.id) return;
 
-            if (socket.role) {
-                //角色离线，更新离线时间
-                var myDate=new Date();
-                var value = myDate.getTime()/1000;
+            if (socket.uid) {
+                delete clients[socket.app][socket.uid];
+                redis_io.lrem(socket.app+"_user_list",0,socket.uid,redis.print);
+                log("["+socket.app+"]的用户(id="+socket.uid+")已经离线");
+
+                if (socket.role) {
+                    //角色离线，更新离线时间
+                    var myDate=new Date();
+                    var value = myDate.getTime()/1000;
                 redis_io.hset(socket.app+"_"+socket.role+"_list",socket.uid, value);
+                }
             }
+        } catch (error) {
+            log(error);
+            return
         }
     });
 
