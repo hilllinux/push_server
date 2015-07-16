@@ -21,10 +21,12 @@ var redis_io                = redis.createClient('6379', '127.0.0.1');
 
 var debug = 1;
 function log(msg){
+
     if (!debug) return;
 
     var date = new Date(); 
     console.info(date+" --> "+msg);
+
 }
 
 log('SocketIO 开始监听3000端口');
@@ -45,6 +47,7 @@ log('SocketIO 开始监听3000端口');
  */
 
 redis_sub_event_handler.on("ready", function() {
+
     log("redis 连接成功");
     // redis 订阅 msg 这个频道，后期需要将频道设置成配置项
     redis_sub_event_handler.subscribe("msg");
@@ -67,17 +70,21 @@ redis_sub_event_handler.on("message", function(channel, msg){
         //var info   = '{"mid":"'+mid+'","msg":"'+obj.msg+'"}';
 
         if (!id || !mid || !info || !app) {
+
             log("JSON 格式不完整");
             return ;
+
         }
 
 
         // 用户不在线
         if (!clients[app][id]) {
+
             log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
             // 消息发送失败原因写入缓存;
             // redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
             return;
+
         }
 
         info = JSON.stringify(info);
@@ -85,6 +92,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
         log("向["+app+"]的用户(id="+id+")推送消息:"+info);
 
         try {
+
             clients[app][id].emit('info',info);
 
         } catch (error) {
@@ -93,6 +101,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
                 log("["+app+"]用户(id="+id+") 不在线，加入到重发列表:"+msg);
                 redis_io.rpush(app+"_"+"resend_list", msg)
             }
+
         }
 
         //点对点消息状态写入缓存操作;
@@ -101,19 +110,23 @@ redis_sub_event_handler.on("message", function(channel, msg){
         // 将消息写到消息队列中; 如成功接收到APP客户端的反馈，则移除；
         // 后续在定时器中添加，满n 次推送未收到反馈移除该消息的逻辑
         if (!(message_query["msg_"+app+"_"+mid])) {
+
             var message_item        = {}
             message_item["msg"]     = msg;
             message_item["counter"] = 0;
-
             message_query["msg_"+app+"_"+mid] = message_item;
+            
         }
 
 
     } catch (error) {
+
         log(error);
         log("即时消息推送请求的 JSON 格式错误");
         return;
+
     }
+
 });
 
 /*
@@ -130,11 +143,13 @@ ioServer.sockets.on('connection', function(socket) {
 
     // 新的 socket 登入，检测是否是已经注册的，否则通知注册；
     if (!socket.uid) {
+
         log("用户未注册");
         // 将 socket 实例加入到未注册列表中;
         unreg_clients.push(socket);
         // 消息推送到客户端提醒注册；
         socket.emit('reg','{"msg":"unreg"}');
+
     }
 
     // APP 端用户socket 和 client ID 绑定流程；
@@ -143,26 +158,32 @@ ioServer.sockets.on('connection', function(socket) {
         log("收到APP用户注册请求"+message);
         
         if(socket.uid) { 
+
             log("["+socket.app+"]用户("+socket.uid+")已经注册") 
             socket.emit('reg', '{"msg":"connected"}');
             return;
+
         }
 
-        try{
+        try {
+
             var client_message = JSON.parse(message);
             var user_id  = client_message.id,
                 app      = client_message.app,
                 role_type= client_message.role;
 
             if (!user_id || !app) {
+
                 log("JSON 格式不完整 2");
                 return ;
+
             }
 
             if (role_type) {
                 // e.g. redis.hset(msd_fm_list , 7000, 0)
                 redis_io.hset(app+"_"+role_type+"_list", user_id, 0);
                 socket.role = role_type;
+
             }
 
             socket.uid = user_id;
@@ -176,17 +197,21 @@ ioServer.sockets.on('connection', function(socket) {
             // 从未注册列表中删除已注册的socket 实例
             var index = unreg_clients.indexOf(socket);
             if (index != -1) {
+
                 unreg_clients.splice(index, 1);
                 log("["+app+"]的用户(id="+socket.uid+")注册成功");
+
             }
 
             // 消息推送客户端注册成功；
             socket.emit('reg', '{"msg":"connected"}');
 
         } catch (error) {
+
             log(error);
             log("APP注册请求的JSON格式不正确");
-            return
+            return;
+
         }
 
     })
@@ -196,9 +221,8 @@ ioServer.sockets.on('connection', function(socket) {
     // 缓存中标记 该消息已经送达客户端
     socket.on('rev', function(message){
 
-        log(message);
+        try {
 
-        try{
             var client_message = JSON.parse(message);
             var mid      = client_message.mid,
                 app      = client_message.app;
@@ -215,12 +239,77 @@ ioServer.sockets.on('connection', function(socket) {
             //redis_io.set("msg_"+app+"_"+mid,'{"status":"recived"}',redis.print)
 
         } catch (error) {
+
             log(error);
             log("APP消息确认请求的JSON格式不正确");
-            return
+            return;
+
         }
 
     })
+
+    // APP 地址事件
+    // 镖师端上传地址坐标或者客户端获取当前镖师地理位置
+    socket.on('loc', function loc_event(message) {
+
+        log("收到[" + app + "]用户(id=" + socket.uid + " loc 事件" + message);
+
+        try {
+
+            var message_json = JSON.parse(message);
+            var type         = message_json.type;
+            var foot_man_id  = message_json.id;
+            //var role         = message_json.role; //扩展属性
+
+            // get为用户获取镖师坐标
+            // set为镖师上传坐标
+            if (type == 'get') {
+
+                if (foot_man_id) {
+
+                    redis_io.get('user_'+foot_man_id, function redis_get_handler(reply, err) {
+
+                        socket.emit('loc', reply);
+
+                    }
+                }
+
+            } else if (type == 'set') {
+
+                var lon = message_json.lon;
+                var lat = message_json.lat;
+
+                //获取当前数据
+                if (lan && lat) {
+                    redis_io.get('user_'+foot_man_id, function redis_get_handler(reply, err) {
+
+                        try {
+
+                            var json_data = JSON.parse(reply);
+                            json_data.longitude = lon;
+                            json_data.latitude  = lan;
+                            redis_io.set('user_'+foot_man_id, JSON.stringify(json_data), redis.print);
+
+                        }
+                        catch (error) {
+
+                            log("redis get触发错误事件，错误原因如下:");
+                            log(error)
+
+                        }
+                    }
+                }
+
+            }
+
+        } catch (error) {
+
+            log("loc 事件触发错误事件，错误原因如下:");
+            log(error);
+
+        }
+    
+    }
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
@@ -234,20 +323,27 @@ ioServer.sockets.on('connection', function(socket) {
             if (socket_in_list.id  && socket_in_list.id != socket.id) return;
 
             if (socket.uid) {
+
                 delete clients[socket.app][socket.uid];
                 redis_io.lrem(socket.app+"_user_list",0,socket.uid,redis.print);
                 log("["+socket.app+"]的用户(id="+socket.uid+")已经离线");
 
                 if (socket.role) {
+
                     //角色离线，更新离线时间
                     var myDate=new Date();
                     var value = myDate.getTime()/1000;
-                redis_io.hset(socket.app+"_"+socket.role+"_list",socket.uid, value);
+                    redis_io.hset(socket.app+"_"+socket.role+"_list",socket.uid, value);
+
                 }
+
             }
+
         } catch (error) {
+
             log(error);
             return
+
         }
     });
 
@@ -260,12 +356,13 @@ function resend_message_to_client(msg_index) {
 
     var counter = message_query[msg_index]["counter"];
     if (counter == 5) {
+
         message_query[msg_index]["counter"] = 0;
         delete message_query[msg_index];
         return;
     }
 
-    try{
+    try {
 
         var obj = JSON.parse(message_query[msg_index]["msg"]);
         var id     = obj.user_id,
@@ -274,6 +371,7 @@ function resend_message_to_client(msg_index) {
             mid    = obj.mid;
 
         if (clients[app][id]) {
+
             log("重新发送消息到["+app+"]用户(id="+id+"), 当前第("+counter+")次");
             clients[app][id].emit('info',info);
             // 重发次数累加
@@ -281,6 +379,7 @@ function resend_message_to_client(msg_index) {
             message_query[msg_index]["counter"] = counter;
 
         } else {
+
             log("["+app+"]的用户("+id+")不在线，推送失败");
             // 用户不在线，删除推送消息对象
             // delete message_query[msg_index];
@@ -288,10 +387,12 @@ function resend_message_to_client(msg_index) {
             // 消息发送失败原因写入缓存;
             //redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
         }
+
     } catch(error) {
 
         log("重发失败");
         log(error);
+
     }
 }
 
