@@ -80,7 +80,16 @@ redis_sub_event_handler.on("message", function(channel, msg){
         // 用户不在线
         if (!clients[app][id]) {
 
-            log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
+            if ('pdl' == app) {
+
+                redis_io.rpush(app+"_"+"resend_list", msg)
+                log("["+app+"]的用户:(id=" + id+")不在线，加入到重发列表");
+
+            } else {
+
+                log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
+
+            }
             // 消息发送失败原因写入缓存;
             // redis_io.set("msg_"+app+"_"+mid,'{"status":"faild","reason":"not alive"}',redis.print)
             return;
@@ -99,7 +108,6 @@ redis_sub_event_handler.on("message", function(channel, msg){
             // 发送失败，加入到重发列表
             if (app == "msd") {
                 log("["+app+"]用户(id="+id+") 不在线，加入到重发列表:"+msg);
-                redis_io.rpush(app+"_"+"resend_list", msg)
             }
 
         }
@@ -290,8 +298,7 @@ ioServer.sockets.on('connection', function(socket) {
                             json_data.latitude  = lan;
                             redis_io.set('user_'+foot_man_id, JSON.stringify(json_data), redis.print);
 
-                        }
-                        catch (error) {
+                        } catch (error) {
 
                             log("redis get触发错误事件，错误原因如下:");
                             log(error)

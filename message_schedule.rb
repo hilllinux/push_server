@@ -13,6 +13,7 @@ SLEEP_TIME          = 1
 REDIS_WAIT_TIME     = 5
 ORDER_DROP_TIME     = 300
 MERCHANT_LEFT_TIME  = 300
+FOOTMAN_LEFT_TIME   = 300
 
 # 缓存前缀
 USER_LIST           = "msd_user_list"
@@ -21,20 +22,23 @@ ORDER_PREFIX        = "order_"
 PUSH_LIST_PREFIX    = "push_list_"
 MERCHART_LIST       = "msd_merchant_list"
 FOOT_MAN_LIST       = "msd_footman_list"
+USER_PREFIX         = "user_"
 
 # 数据库信息
 HOSTNAME            = "localhost"
-DATABASE            = "mashangdao"
+DATABASE            = "mashangdao20150514"
 USERNAME            = "root"
 PASSWORD            = "1moodadmin"
 PORT                = 3306
 
+# 写文件
 def save_to_file path,message
     File.open(path, 'a') do |f|
     f.write(message)
     end
 end
 
+# 写日志模块
 def log message
     message = "%s=>%s\n" % [Time.now, message]
     if nil then
@@ -44,6 +48,7 @@ def log message
     end
 end
 
+# 更新数据库，设置商家为下线状态
 def set_merchat_to_offline merchant_id
     begin
         # connect to the   server
@@ -52,7 +57,7 @@ def set_merchat_to_offline merchant_id
         sql_state = "UPDATE tp_merchant SET online = 0 WHERE merchant_id = #{merchant_id}"
         log sql_state
         dbh.query(sql_state)
-    rescue MysqlError => e
+   rescue MysqlError => e
         log "mysql---->Error code: #{e.errno} \n     ---->Error message: #{e.error}"
     ensure
         # disconnect from server
@@ -60,8 +65,17 @@ def set_merchat_to_offline merchant_id
     end
 end
 
-def set_foot_man_to_offline redis,foot_man_id
+# 更新缓存，设置镖师为下线状态
+def set_foot_man_to_offline redis,user_id
     begin
+        user_info = redis.get(%Q{#{USER_PREFIX}#{user_id}})
+        if user_info then
+            user_info_detail = JSON.parse(user_info)
+            user_info_detail["online"] = 0
+            redis.set(%Q{#{USER_PREFIX}#{user_id}},JSON.generate(user_info_detail))
+        end
+    rescue Exception => e
+        log %Q{#{e.message} here 3 }
     end
 end
 
@@ -78,11 +92,38 @@ def merchant_check redis
             end
         }
     rescue Exception => e
-        log e.message
+        log %Q{#{e.message} here 1 }
     end
 end
 
 def footman_check redis
+    #如果离线时间大于设置时间，则标识为离线
+    begin
+        redis.hkeys(FOOT_MAN_LIST).each { |item|
+            value = redis.hget(FOOT_MAN_LIST, item)
+
+            if value and value.to_i != 0 and value.to_i + FOOTMAN_LEFT_TIME < Time.now.to_i then 
+                log %Q{set footman (id=#{item}) to offline}
+                set_foot_man_to_offline redis,item
+                redis.hdel(FOOT_MAN_LIST, item)
+            end
+        }
+    rescue Exception => e
+        log %Q{#{e.message} here 2 }
+    end
+end
+
+def show_online_status redis
+    begin 
+        if (Time.now.to_i % 5)==0 then
+            merchant_nums = redis.hlen(MERCHART_LIST).to_i
+            footman_nums  = redis.hlen(FOOT_MAN_LIST).to_i
+            log(%Q{current merchant_nums (#{merchant_nums}) and footman_nums (#{footman_nums})})
+        end
+
+    rescue Exception =>e 
+        log %Q{#{e.message} here 4 }
+    end
 end
 
 def message_check_and_send redis
@@ -120,12 +161,12 @@ def message_check_and_send redis
                     # 更新镖师信息
                     log %Q{message (id= #{message_detail["mid"]}) has send to client (id=#{message_detail["user_id"]})}
 
-                    user_info = redis.get(%Q{user_#{message_detail["user_id"]}})
+                    user_info = redis.get(%Q{#{USER_PREFIX}#{message_detail["user_id"]}})
                     if user_info then
                         user_info_detail = JSON.parse(user_info)
                         user_info_detail["last_push_time"] = Time.now.to_i
                         log %Q{update the pushtime of user (id=#{message_detail["user_id"]})}
-                        redis.set(%Q{user_#{message_detail["user_id"]}},JSON.generate(user_info_detail))
+                        redis.set(%Q{#{USER_PREFIX}#{message_detail["user_id"]}},JSON.generate(user_info_detail))
                         redis.rpush(%Q{#{PUSH_LIST_PREFIX}#{message_detail['order_id']}}, message_detail['user_id'])
                     end
                     break #推送成功，进入下一条发送间隔
@@ -135,7 +176,7 @@ def message_check_and_send redis
                 end
 
             rescue Exception => e
-                log e.message
+                log %Q{#{e.message} here 5 }
                 next
             end
         }
@@ -161,6 +202,8 @@ loop do
         footman_check  redis_obj
         # 商户在线检测
         merchant_check redis_obj
+        # 输出在线情况
+        show_online_status redis_obj
 
     rescue Exception => e
         log e.message
