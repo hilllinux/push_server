@@ -30,7 +30,6 @@ function log(msg){
 
 log('SocketIO 开始监听3000端口');
 
-
 /* 
  * Desc:
  * 这个逻辑块主要处理来至 PHP 端的消息；
@@ -90,16 +89,15 @@ redis_sub_event_handler.on("message", function(channel, msg){
                 obj.sendtime  = 1;
                 // 更新最后发送时间
                 obj.lasttime  = value;
-                redis_io.hset(app+"_user_resend_list", id, json_data);
+                //redis_io.hset(app+"_user_resend_list", id, msg);
 
             }
-
 
             // 插入到消息队列
             // 根据人物缓存
             var json_data = JSON.stringify(obj);
             log('消息插入到消息队列:' + json_data);
-            redis_io.hset(app+"_resend_list", mid, json_data);
+            redis_io.hset("pdl_resend_list", mid, json_data);
         
         }
 
@@ -176,17 +174,28 @@ ioServer.sockets.on('connection', function(socket) {
             log("["+socket.app+"]用户("+socket.uid+")已经注册") 
             socket.emit('reg', '{"msg":"connected"}');
 
-            if (app == 'pdl') {
+            //查看是否有消息滞留，有则推送之
+            if (socket.app == 'pdl') {
+                redis_io.hget('pdl_user_resend_list', socket.uid, function hget(err,obj) {
 
-                redis_io.hget(app+'_user_resend_list', socket.uid, function hget_redis(reply,err) {
+                    //删除滞留信息
+                    redis_io.hdel('pdl_user_resend_list', socket.uid, redis.print)
+                    log('reply:' + obj);
+                    try {
+                        var json_obj = JSON.parse(obj);
+                        if (!json_obj) return; 
+                        var info  = json_obj.msg;
+                        var mid   = json_obj.mid;
+                        //socket.emit('info', JSON.stringify(info));
+                        redis_io.hset('pdl_resend_list', mid, obj);
 
-                    var obj  = JSON.parse(reply);
-                    var info = obj.info
-                    log('reg 向(' + socket.uid + ') 推送消息:' JSON.stringify(info);
-                    socket.emit('info', JSON.stringify(info));
-                    // 即时消息推送
-                    redis_io.hdel(app+'_user_resend_list', socket.uid, redis.print) 
-                
+                    } catch (error) {
+
+                        log('滞留信息推送报错: ' + error);
+
+                    }
+
+
                 });
             }
 
@@ -267,7 +276,7 @@ ioServer.sockets.on('connection', function(socket) {
             log("收到["+app+"]用户(id="+socket.uid+") 对消息(mid_"+mid+")确认请求");
 
             // 消息队列中移除已发送的消息
-            redis_io.hdel(app+'_resend_list', mid, function hash_del(reply, err) {
+            redis_io.hdel('pdl_resend_list', mid, function hash_del(err, reply) {
 
                 log('mid( ' + mid + ') 消息队列移除成功');
 
@@ -286,65 +295,64 @@ ioServer.sockets.on('connection', function(socket) {
 
     // APP 地址事件
     // 镖师端上传地址坐标或者客户端获取当前镖师地理位置
-    //socket.on('loc', function loc_event(message) {
+    socket.on('loc', function loc_event(message) {
+        log("收到[" + app + "]用户(id=" + socket.uid + " loc 事件" + message);
+        try {
 
-    //    log("收到[" + app + "]用户(id=" + socket.uid + " loc 事件" + message);
+            var message_json = JSON.parse(message);
+            if (!message_json) return;
 
-    //    try {
+            var type         = message_json.type;
+            var foot_man_id  = message_json.id;
+            //var role         = message_json.role; //扩展属性
+           if (type == 'get') {
 
-    //        var message_json = JSON.parse(message);
-    //        var type         = message_json.type;
-    //        var foot_man_id  = message_json.id;
-    //        //var role         = message_json.role; //扩展属性
+               if (foot_man_id) {
 
-    //        // get为用户获取镖师坐标
-    //        // set为镖师上传坐标
-    //        if (type == 'get') {
+                   redis_io.get('user_'+foot_man_id, function redis_get_handler(err, reply) {
 
-    //            if (foot_man_id) {
+                       socket.emit('loc', reply);
 
-    //                redis_io.get('user_'+foot_man_id, function redis_get_handler(reply, err) {
+                   });
+               }
 
-    //                    socket.emit('loc', reply);
+           } 
 
-    //                }
-    //            }
+           if (type == 'set') {
+           
+                var lon = message_json.lon;
+                var lat = message_json.lat;
 
-    //        } else {
+                //获取当前数据
+                if (lan && lat) {
+                    redis_io.get('user_'+foot_man_id, function redis_set_handler(err, reply) {
 
-    //            var lon = message_json.lon;
-    //            var lat = message_json.lat;
+                        try {
 
-    //            //获取当前数据
-    //            if (lan && lat) {
-    //                redis_io.get('user_'+foot_man_id, function redis_set_handler(reply, err) {
+                            var json_data = JSON.parse(reply);
+                            json_data.longitude = lon;
+                            json_data.latitude  = lan;
+                            redis_io.set('user_'+foot_man_id, JSON.stringify(json_data), redis.print);
 
-    //                    try {
+                        } catch (error) {
 
-    //                        var json_data = JSON.parse(reply);
-    //                        json_data.longitude = lon;
-    //                        json_data.latitude  = lan;
-    //                        redis_io.set('user_'+foot_man_id, JSON.stringify(json_data), redis.print);
+                            log("redis get触发错误事件，错误原因如下:");
+                            log(error)
 
-    //                    } catch (error) {
+                        }
+                    });
+                }
+           
+           }
 
-    //                        log("redis get触发错误事件，错误原因如下:");
-    //                        log(error)
+        } catch (error) {
 
-    //                    }
-    //                }
-    //            }
+            log("loc 事件触发错误事件，错误原因如下:");
+            log(error);
 
-    //        }
+        }
 
-    //    } catch (error) {
-
-    //        log("loc 事件触发错误事件，错误原因如下:");
-    //        log(error);
-
-    //    }
-    //
-    //}
+    }
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
