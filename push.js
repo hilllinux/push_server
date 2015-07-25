@@ -87,14 +87,16 @@ redis_sub_event_handler.on("message", function(channel, msg){
 
             } else {
 
-                obj.sendtime = 1;
+                obj.sendtime  = 1;
+                // 更新最后发送时间
+                obj.lasttime  = value;
+                redis_io.hset(app+"_user_resend_list", id, json_data);
 
             }
 
-            // 更新最后发送时间
-            obj.lasttime  = value;
 
             // 插入到消息队列
+            // 根据人物缓存
             var json_data = JSON.stringify(obj);
             log('消息插入到消息队列:' + json_data);
             redis_io.hset(app+"_resend_list", mid, json_data);
@@ -121,7 +123,9 @@ redis_sub_event_handler.on("message", function(channel, msg){
         } catch (error) {
             // 发送失败，加入到重发列表
             if (app == "msd") {
+
                 log("["+app+"]用户(id="+id+") 不在线，加入到重发列表:"+msg);
+
             }
 
         }
@@ -167,8 +171,28 @@ ioServer.sockets.on('connection', function(socket) {
         
         if(socket.uid) { 
 
+            var app = socket.app;
+
             log("["+socket.app+"]用户("+socket.uid+")已经注册") 
             socket.emit('reg', '{"msg":"connected"}');
+
+            if (app == 'pdl') {
+
+                redis_io.hget(app+'_user_resend_list', id, function hget_redis(reply,err) {
+
+                    var obj = JSON.parse(reply);
+                    var mid = obj.mid;
+                    // 即时消息推送
+                    redis_io.hdel(app+'_user_resend_list', socket.uid, function hdel(m, e) {
+
+                        log('add last msg to resend_list: ' + reply);
+                        redis_io.hset(app+'_resend_list', mid, reply);
+                    
+                    });
+                
+                });
+            }
+
             return;
 
         }
@@ -228,6 +252,7 @@ ioServer.sockets.on('connection', function(socket) {
     // 消息队列中移除已发送的消息
     // 缓存中标记 该消息已经送达客户端
     socket.on('rev', function(message){
+        log(message)
 
         try {
 
@@ -245,15 +270,12 @@ ioServer.sockets.on('connection', function(socket) {
             log("收到["+app+"]用户(id="+socket.uid+") 对消息(mid_"+mid+")确认请求");
 
             // 消息队列中移除已发送的消息
-            if (app == 'pdl') {
+            redis_io.hdel(app+'_resend_list', mid, function hash_del(reply, err) {
 
-                redis_io.hdel(app+'_resend_list', mid, function hash_del(reply, err) {
+                log('mid( ' + mid + ') 消息队列移除成功');
 
-                    log('mid( ' + mid + ') 消息队列移除成功');
+            });
 
-                });
-
-            }
 
         } catch (error) {
 

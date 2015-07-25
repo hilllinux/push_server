@@ -1,3 +1,4 @@
+# encoding: utf-8
 require 'rubygems'
 require 'redis'
 require 'json'
@@ -31,15 +32,11 @@ USERNAME            = "root"
 PASSWORD            = "1moodadmin"
 PORT                = 3306
 
-#推送设置
-msg_resend_list     = [
-
-    'pdl_resend_list', 
-
-]
-
-# 常量定义
-ORDER_BEEN_ROBED    ＝ 1
+ORDER_BEEN_ROBED    = 1
+# 消息重发设置
+MSG_RESEND_LIST     = "pdl_resend_list"
+RESEND_LIMIT        = 5
+RESEND_TIME_EXPIRED = 60
 
 # 写文件
 def save_to_file path,message
@@ -143,28 +140,27 @@ end
 def message_resend_handler redis
     begin 
         #时间发送间隔
-        if (Time.now.to_i % 2) == 0 then
+        if (Time.now.to_i % 5) == 0 then
 
-            msg_resend_list.each { |message_list|
+            redis.hkeys(MSG_RESEND_LIST).each { |item|
 
-                redis.hkeys(message_list).each { |item|
+                json_value  = redis.hget(MSG_RESEND_LIST, item)
+                json_detail = JSON.parse(json_value) if json_value
+                next if not json_detail
 
-                    json_value  = redis.hget(message_list, item)
-                    json_detail = JSON.parse(json_value) if json_value
-                    next if not json_detail
+                already_send_num = json_detail["sendtime"].to_i
+                last_push_time   = json_detail['lasttime'].to_i
 
-                    already_send_num = json_detail["sendtime"].to_i
-                    if already_send_num <= RESEND_LIMIT then
-                        log(%Q{resend time: #{already_send_num+1}})
-                        redis.publish(Channel,message)
-                    else
-                        log('reach resend limit, remove from resend list')
-                        redis.hdel(message,item)
-                    end
-
+                if (already_send_num < RESEND_LIMIT) then 
+                #if (last_push_time + RESEND_TIME_EXPIRED > Time.now.to_i )  then
+                    log(%Q{resend time #{already_send_num+1}})
                     # 发送消息
-                }
-            
+                    redis.publish(Channel,json_value)
+                else
+                    log('reach resend limit, remove from resend list')
+                    redis.hdel(MSG_RESEND_LIST,item)
+                end
+
             }
             
         end
@@ -270,7 +266,7 @@ loop do
         # 输出在线情况
         show_online_status redis_obj
         # 消息重发列表
-        message_resend_handler redis_obj
+        # message_resend_handler redis_obj
 
     rescue Exception => e
         log e.message
