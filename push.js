@@ -178,17 +178,14 @@ ioServer.sockets.on('connection', function(socket) {
 
             if (app == 'pdl') {
 
-                redis_io.hget(app+'_user_resend_list', id, function hget_redis(reply,err) {
+                redis_io.hget(app+'_user_resend_list', socket.uid, function hget_redis(reply,err) {
 
-                    var obj = JSON.parse(reply);
-                    var mid = obj.mid;
+                    var obj  = JSON.parse(reply);
+                    var info = obj.info
+                    log('reg 向(' + socket.uid + ') 推送消息:' JSON.stringify(info);
+                    socket.emit('info', JSON.stringify(info));
                     // 即时消息推送
-                    redis_io.hdel(app+'_user_resend_list', socket.uid, function hdel(m, e) {
-
-                        log('add last msg to resend_list: ' + reply);
-                        redis_io.hset(app+'_resend_list', mid, reply);
-                    
-                    });
+                    redis_io.hdel(app+'_user_resend_list', socket.uid, redis.print) 
                 
                 });
             }
