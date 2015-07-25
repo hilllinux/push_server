@@ -31,6 +31,16 @@ USERNAME            = "root"
 PASSWORD            = "1moodadmin"
 PORT                = 3306
 
+#推送设置
+msg_resend_list     = [
+
+    'pdl_resend_list', 
+
+]
+
+# 常量定义
+ORDER_BEEN_ROBED    ＝ 1
+
 # 写文件
 def save_to_file path,message
     File.open(path, 'a') do |f|
@@ -126,6 +136,45 @@ def show_online_status redis
     end
 end
 
+
+# 消息重发逻辑
+# 获取消息重发次数
+# 最长延长时间 delay * time
+def message_resend_handler redis
+    begin 
+        #时间发送间隔
+        if (Time.now.to_i % 2) == 0 then
+
+            msg_resend_list.each { |message_list|
+
+                redis.hkeys(message_list).each { |item|
+
+                    json_value  = redis.hget(message_list, item)
+                    json_detail = JSON.parse(json_value) if json_value
+                    next if not json_detail
+
+                    already_send_num = json_detail["sendtime"].to_i
+                    if already_send_num <= RESEND_LIMIT then
+                        log(%Q{resend time: #{already_send_num+1}})
+                        redis.publish(Channel,message)
+                    else
+                        log('reach resend limit, remove from resend list')
+                        redis.hdel(message,item)
+                    end
+
+                    # 发送消息
+                }
+            
+            }
+            
+        end
+
+    rescue Exception =>e 
+        log %Q{message resend error hanbend #{e.message}}
+    end
+end
+
+# 本方法包含镖师抢单的业务逻辑
 def message_check_and_send redis
     redis.lrange(USER_LIST,0,-1).each { |x|
         message_list_tag = %Q{#{MESSAGE_LIST_PREFIX}#{x}}
@@ -135,49 +184,65 @@ def message_check_and_send redis
         0.upto(len) {
             message = redis.lpop(message_list_tag) 
             begin
+                # 消息解析
                 message_detail = JSON.parse(message) if message
                 next if not message_detail
 
-                # 订单不存在或者订单状态被抢，则移除该消息
+                # 判断订单是否存在，不存在则移除该消息
                 order = redis.get(%Q{#{ORDER_PREFIX}#{message_detail["order_id"]}})
                 if not order then
                     log %Q{order (id=#{message_detail["order_id"]}) is not exists}
                     next
                 end
 
+                # 判断订单是否被抢，被抢则跳过消息
                 order_detail = JSON.parse(order)
-                if order_detail["state"].to_i == 1 then
+                if order_detail["state"].to_i == ORDER_BEEN_ROBED then
                     log %Q{order (id=#{message_detail["order_id"]}) is robed}
                     next
                 end
 
-                push_time_foot_man = message_detail["push_time"].to_i
                 #到达发送时间
+                push_time_foot_man = message_detail["push_time"].to_i
                 if push_time_foot_man <= Time.now.to_i
-                #if message_detail["push_time"].to_i <= Time.now.to_i 
+
                     # 如果镖师推送时间超过5分钟，则取消发送, 消息过期
                     next if Time.now.to_i > push_time_foot_man + ORDER_DROP_TIME
+
+                    # 满足条件，推送消息
                     redis.publish(Channel,message)
+                    # end 推送消息
+
                     # 更新镖师信息
                     log %Q{message (id= #{message_detail["mid"]}) has send to client (id=#{message_detail["user_id"]})}
 
+                    # 更新缓存内消息
                     user_info = redis.get(%Q{#{USER_PREFIX}#{message_detail["user_id"]}})
                     if user_info then
+
                         user_info_detail = JSON.parse(user_info)
                         user_info_detail["last_push_time"] = Time.now.to_i
                         log %Q{update the pushtime of user (id=#{message_detail["user_id"]})}
                         redis.set(%Q{#{USER_PREFIX}#{message_detail["user_id"]}},JSON.generate(user_info_detail))
                         redis.rpush(%Q{#{PUSH_LIST_PREFIX}#{message_detail['order_id']}}, message_detail['user_id'])
+
                     end
+
                     break #推送成功，进入下一条发送间隔
+
                 else
+
+                    # 消息未达到推送时间，压入推送列表
                     redis.rpush(message_list_tag,message)
                     log %Q{message (id=#{message_detail["mid"]}) push back to list}
+
                 end
 
             rescue Exception => e
+
                 log %Q{#{e.message} here 5 }
                 next
+
             end
         }
     }
@@ -204,6 +269,8 @@ loop do
         merchant_check redis_obj
         # 输出在线情况
         show_online_status redis_obj
+        # 消息重发列表
+        message_resend_handler redis_obj
 
     rescue Exception => e
         log e.message
