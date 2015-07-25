@@ -89,7 +89,6 @@ redis_sub_event_handler.on("message", function(channel, msg){
                 obj.sendtime  = 1;
                 // 更新最后发送时间
                 obj.lasttime  = value;
-                //redis_io.hset(app+"_user_resend_list", id, msg);
 
             }
 
@@ -106,6 +105,7 @@ redis_sub_event_handler.on("message", function(channel, msg){
         if (!clients[app][id]) {
 
             log("["+app+"]的用户:(id=" + id+")不在线，推送失败");
+            redis_io.hset(app+"_user_resend_list", id, msg);
             return;
 
         }
@@ -252,7 +252,7 @@ ioServer.sockets.on('connection', function(socket) {
 
         }
 
-    })
+    });
 
     // APP 消息已送到  事件处理逻辑
     // 消息队列中移除已发送的消息
@@ -291,7 +291,7 @@ ioServer.sockets.on('connection', function(socket) {
 
         }
 
-    })
+    });
 
     // APP 地址事件
     // 镖师端上传地址坐标或者客户端获取当前镖师地理位置
@@ -352,7 +352,7 @@ ioServer.sockets.on('connection', function(socket) {
 
         }
 
-    }
+    });
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
