@@ -282,14 +282,14 @@ ioServer.sockets.on('connection', function(socket) {
                     }
                 }
 
-            } else if (type == 'set') {
+            } else {
 
                 var lon = message_json.lon;
                 var lat = message_json.lat;
 
                 //获取当前数据
                 if (lan && lat) {
-                    redis_io.get('user_'+foot_man_id, function redis_get_handler(reply, err) {
+                    redis_io.get('user_'+foot_man_id, function redis_set_handler(reply, err) {
 
                         try {
 
@@ -320,7 +320,7 @@ ioServer.sockets.on('connection', function(socket) {
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
-        try{
+        try {
             // socket 未注册，直接退出逻辑
             if (!socket.uid || !socket.app) return;
             // 获取列表中socket
