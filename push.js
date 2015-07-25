@@ -258,65 +258,65 @@ ioServer.sockets.on('connection', function(socket) {
 
     // APP 地址事件
     // 镖师端上传地址坐标或者客户端获取当前镖师地理位置
-    socket.on('loc', function loc_event(message) {
+    //socket.on('loc', function loc_event(message) {
 
-        log("收到[" + app + "]用户(id=" + socket.uid + " loc 事件" + message);
+    //    log("收到[" + app + "]用户(id=" + socket.uid + " loc 事件" + message);
 
-        try {
+    //    try {
 
-            var message_json = JSON.parse(message);
-            var type         = message_json.type;
-            var foot_man_id  = message_json.id;
-            //var role         = message_json.role; //扩展属性
+    //        var message_json = JSON.parse(message);
+    //        var type         = message_json.type;
+    //        var foot_man_id  = message_json.id;
+    //        //var role         = message_json.role; //扩展属性
 
-            // get为用户获取镖师坐标
-            // set为镖师上传坐标
-            if (type == 'get') {
+    //        // get为用户获取镖师坐标
+    //        // set为镖师上传坐标
+    //        if (type == 'get') {
 
-                if (foot_man_id) {
+    //            if (foot_man_id) {
 
-                    redis_io.get('user_'+foot_man_id, function redis_get_handler(reply, err) {
+    //                redis_io.get('user_'+foot_man_id, function redis_get_handler(reply, err) {
 
-                        socket.emit('loc', reply);
+    //                    socket.emit('loc', reply);
 
-                    }
-                }
+    //                }
+    //            }
 
-            } else {
+    //        } else {
 
-                var lon = message_json.lon;
-                var lat = message_json.lat;
+    //            var lon = message_json.lon;
+    //            var lat = message_json.lat;
 
-                //获取当前数据
-                if (lan && lat) {
-                    redis_io.get('user_'+foot_man_id, function redis_set_handler(reply, err) {
+    //            //获取当前数据
+    //            if (lan && lat) {
+    //                redis_io.get('user_'+foot_man_id, function redis_set_handler(reply, err) {
 
-                        try {
+    //                    try {
 
-                            var json_data = JSON.parse(reply);
-                            json_data.longitude = lon;
-                            json_data.latitude  = lan;
-                            redis_io.set('user_'+foot_man_id, JSON.stringify(json_data), redis.print);
+    //                        var json_data = JSON.parse(reply);
+    //                        json_data.longitude = lon;
+    //                        json_data.latitude  = lan;
+    //                        redis_io.set('user_'+foot_man_id, JSON.stringify(json_data), redis.print);
 
-                        } catch (error) {
+    //                    } catch (error) {
 
-                            log("redis get触发错误事件，错误原因如下:");
-                            log(error)
+    //                        log("redis get触发错误事件，错误原因如下:");
+    //                        log(error)
 
-                        }
-                    }
-                }
+    //                    }
+    //                }
+    //            }
 
-            }
+    //        }
 
-        } catch (error) {
+    //    } catch (error) {
 
-            log("loc 事件触发错误事件，错误原因如下:");
-            log(error);
+    //        log("loc 事件触发错误事件，错误原因如下:");
+    //        log(error);
 
-        }
-    
-    }
+    //    }
+    //
+    //}
 
     // 收到APP掉线事件，将 socket 实例列表删除已下线的socket.
     socket.on('disconnect', function() {
