@@ -35,7 +35,7 @@ PORT                = 3306
 ORDER_BEEN_ROBED    = 1
 # 消息重发设置
 MSG_RESEND_LIST     = "pdl_resend_list"
-RESEND_LIMIT        = 5
+RESEND_LIMIT        = 2
 RESEND_TIME_EXPIRED = 60
 
 # 写文件
@@ -266,7 +266,7 @@ loop do
         # 输出在线情况
         show_online_status redis_obj
         # 消息重发列表
-        # message_resend_handler redis_obj
+        message_resend_handler redis_obj
 
     rescue Exception => e
         log e.message
