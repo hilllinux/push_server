@@ -162,7 +162,7 @@ ioServer.sockets.on('connection', function(socket) {
 
     // APP 端用户socket 和 client ID 绑定流程；
     // 消息格式：{"app":"msd","id":"123"}
-    socket.on('reg', function(message){
+    socket.on('reg', function(message) {
         log("收到APP用户注册请求"+message);
         
         if(socket.uid) { 
@@ -245,6 +245,15 @@ ioServer.sockets.on('connection', function(socket) {
             log("收到["+app+"]用户(id="+socket.uid+") 对消息(mid_"+mid+")确认请求");
 
             // 消息队列中移除已发送的消息
+            if (app == 'pdl') {
+
+                redis_io.hdel(app+'_resend_list', mid, function hash_del(reply, err) {
+
+                    log('mid( ' + mid + ') 消息队列移除成功');
+
+                });
+
+            }
 
         } catch (error) {
 
