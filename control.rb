@@ -7,4 +7,4 @@ options = {
   :monitor    => true,
 }
 
-Daemons.run('message_schedule.rb', options )
+Daemons.run('/home/wangsongqing/message_schedule.rb', options )
