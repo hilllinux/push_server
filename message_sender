@@ -1,0 +1,78 @@
+#!/bin/bash
+# chkconfig: 2345 98 02
+#
+# description: PM2 next gen process manager for Node.js
+# processname: pm2
+#
+### BEGIN INIT INFO
+# Provides:          pm2
+# Required-Start: $local_fs $remote_fs
+# Required-Stop: $local_fs $remote_fs
+# Should-Start: $network
+# Should-Stop: $network
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description: PM2 init script
+# Description: PM2 is the next gen process manager for Node.js
+### END INIT INFO
+
+
+PREFIX=/home/wangsongqing/push_server
+NAME=message_schedule
+PID=$PREFIX/$NAME.pid
+USER=root
+RUBY=/usr/bin/ruby
+DAEMON=$PREFIX/control.rb
+
+if [ ! -f "$DAEMON" ]; then
+    echo -e "\033[33m $DAEMON script is no exists \033[0m"
+    sleep 1
+    exit 1
+fi
+
+start() {
+    echo "Starting $NAME"
+    if [ ! -f "$PID" ]; then
+        $RUBY $DAEMON 'start'
+    fi
+}
+
+stop() {
+    echo "Stopping $NAME"
+    if [ -f "$PID" ]; then
+        $RUBY $DAEMON 'stop'
+    fi
+}
+
+restart() {
+    echo "Restarting $NAME"
+    if [ -f "$PID" ]; then
+        $RUBY $DAEMON 'restart'
+    else
+        $RUBY $DAEMON 'start'
+    fi
+}
+
+status() {
+    $RUBY $DAEMON 'status'
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status
+        ;;
+    restart)
+        restart
+        ;;
+    *)
+        echo "Usage: {start|stop|status|restart|reload|force-reload}"
+        exit 1
+        ;;
+esac
+exit $RETVAL
