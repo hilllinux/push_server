@@ -296,7 +296,7 @@ ioServer.sockets.on('connection', function(socket) {
     // APP 地址事件
     // 镖师端上传地址坐标或者客户端获取当前镖师地理位置
     socket.on('loc', function loc_event(message) {
-        log("收到[" + app + "]用户(id=" + socket.uid + " loc 事件" + message);
+        log("收到[" + socket.app + "]用户(id=" + socket.uid + " loc 事件" + message);
         try {
 
             var message_json = JSON.parse(message);
